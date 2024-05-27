@@ -1,11 +1,33 @@
 import json
 from urllib import parse
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as ec
+from webdriver_manager.chrome import ChromeDriverManager
 
 BASEURL = 'https://megamarket.ru'
 
 
 def get_pages_html(url):
-    pass
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+    driver.maximize_window()
+    items = []
+    try:
+        for page in range(1, 4):
+            print(f'[+] Страница {page}')
+            driver.get(url=url.replace(f'page_num', f'page-{page}'))
+            WebDriverWait(driver, 60).until(
+                ec.presence_of_element_located((By.TAG_NAME, 'html'))
+            )
+            if not get_items(driver.page_source, items):
+                break
+    except Exception as e:
+        print(e)
+    finally:
+        driver.close()
+        driver.quit()
 
 
 def get_items(html, items):
