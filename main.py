@@ -1,6 +1,10 @@
 import json
+import pandas as pd
+from math import floor
+from bs4 import BeautifulSoup
 from urllib import parse
 from selenium import webdriver
+from selenium.webdriver import ChromeOptions
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
@@ -11,15 +15,16 @@ BASEURL = 'https://megamarket.ru'
 
 
 def get_pages_html(url):
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-    driver.maximize_window()
+    options = ChromeOptions()
+    options.add_argument('--width=1200')
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     items = []
     try:
-        for page in range(1, 4):
+        for page in range(1, 3):
             print(f'[+] Страница {page}')
             driver.get(url=url.replace(f'page_num', f'page-{page}'))
             WebDriverWait(driver, 60).until(
-                ec.presence_of_element_located((By.TAG_NAME, 'html'))
+                ec.presence_of_element_located((By.CLASS_NAME, 'catalog-items-list'))
             )
             if not get_items(driver.page_source, items):
                 break
@@ -28,14 +33,42 @@ def get_pages_html(url):
     finally:
         driver.close()
         driver.quit()
+    return items
 
 
 def get_items(html, items):
-    pass
+    soup = BeautifulSoup(html, 'html.parser')
+    items_divs = soup.find('div', class_='catalog-items-list').find_all('div', recursive=False)
+    if len(items_divs) == 0:
+        return False
+    for item in items_divs:
+        link = BASEURL + a.get('href') if (a := item.find('a', class_='ddl_product_link')) else '-'
+        item_price_result = item_price.find('span').get_text() if (
+            item_price := item.find('div', class_='item-price')) else '-'
+        item_title = item.find('div', class_='item-title').find('a').get_text().strip()
+        item_bonus_amount = item_bonus.find('span', class_='bonus-amount').get_text() if (
+            item_bonus := item.find('div', class_='item-bonus')) else '-'
+        item_merchant_name = merchant_name.get_text().strip() if (
+            merchant_name := item.find('span', class_='merchant-info__name')) else '-'
+        price = int(item_price_result.replace(' ', '').replace(u'\xa0₽', ''))
+        bonus = int(item_bonus_amount) if item_bonus_amount.isdigit() else 0
+        bonus_percent = floor(bonus / price * 100)
+        items.append({
+            'Наименование': item_title,
+            'Продавец': item_merchant_name,
+            'Цена': price,
+            'Сумма бонусов': bonus,
+            'Процент бонуса': bonus_percent,
+            'Ссылка на товар': link,
+        })
+    return True
 
 
-def save_to_excel(data, filename):
-    pass
+def save_to_excel(data: list, filename: str):
+    df = pd.DataFrame(data)
+    writer = pd.ExcelWriter(f'{filename}.xlsx')
+    df.to_excel(writer, sheet_name='data', index=False)
+    writer.close()
 
 
 def start():
